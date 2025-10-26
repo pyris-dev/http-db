@@ -1,0 +1,12 @@
+{
+    "name": "HTTP-DB Development Container",
+    "forwardPorts": [
+        3000
+    ],
+    "portsAttributes": {
+        "3000": {
+            "label": "API Port",
+            "visibility": "public"
+        }
+    }
+}

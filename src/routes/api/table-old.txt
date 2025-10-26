@@ -1,0 +1,70 @@
+import { config, dbManager } from "../../index.js";
+import { checkAuth } from "../../util.js";
+import { RouteHandler, RouteType } from "../index.js";
+
+/** 
+ * Table API Route Handler
+ * This handler manages GET and POST requests for database tables.
+*/
+class TableApiRouteHandler extends RouteHandler {
+    static type = RouteType.METHOD;
+
+    static onGet(req: Request): Response {
+        if (!checkAuth(req, config)) return new Response('Unauthorized', { status: 401 });
+
+        const params = (req as any).params || {};
+        const table = params.table as string;
+        const url = new URL(req.url);
+        const limitRaw = url.searchParams.get('limit');
+        const offsetRaw = url.searchParams.get('offset');
+        const limit = limitRaw ? parseInt(limitRaw, 10) : undefined;
+        const offset = offsetRaw ? parseInt(offsetRaw, 10) : undefined;
+        const orderBy = url.searchParams.get('orderBy') || undefined;
+        const filterRaw = url.searchParams.get('filter') || undefined;
+
+        let filter: Record<string, unknown> | undefined;
+        if (filterRaw) {
+            try { filter = JSON.parse(filterRaw); } catch { /* ignore */ }
+        }
+
+        let items = dbManager.getAll(table);
+        if (filter) {
+            items = items.filter(it => {
+                for (const k of Object.keys(filter!)) {
+                    if ((it as any)[k] !== (filter as any)[k]) return false;
+                }
+                return true;
+            });
+        }
+        if (orderBy) {
+            items = items.sort((a, b) => {
+                const va = (a as any)[orderBy];
+                const vb = (b as any)[orderBy];
+                if (va === vb) return 0;
+                if (va === undefined) return 1;
+                if (vb === undefined) return -1;
+                return va > vb ? 1 : -1;
+            });
+        }
+        const total = items.length;
+        if (typeof offset === 'number') items = items.slice(offset);
+        if (typeof limit === 'number') items = items.slice(0, limit);
+        return Response.json({ total, items }, 200);
+    }
+
+    static async onPost(req: Request): Promise<Response> {
+        if (!checkAuth(req, config)) return new Response('Unauthorized', { status: 401 });
+
+        const params = (req as any).params || {};
+        const table = params.table as string;
+        try {
+            const body = (await req.json()) as Record<string, unknown>;
+            const created = dbManager.create(table, body);
+            return Response.json({ created }, 201);
+        } catch {
+            return Response.json({ error: 'Invalid JSON' }, 400);
+        }
+    }
+}
+
+export { TableApiRouteHandler };
