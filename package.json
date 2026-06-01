@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run ./src/index.ts",
+    "build": "tsc",
+    "start": "bun run ./dist/index.js",
     "bundle": "bun build --compile --output ./bundle/app"
   },
   "author": "",

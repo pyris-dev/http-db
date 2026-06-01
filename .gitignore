@@ -8,3 +8,4 @@ dist
 # Ignore database and log files
 *.sqlite
 *.log
+*.db
