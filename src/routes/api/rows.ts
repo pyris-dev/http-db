@@ -7,12 +7,15 @@ import {
   parseQueryParams,
   textResponse
 } from "../../util.js";
+import { Logger } from "../../logger.js";
 import { RouteHandler, RouteType } from "../index.js";
 
-class RowsApiRouteHandler extends RouteHandler {
-  static type = RouteType.METHOD;
+const ApiRowsLogger = new Logger("API_ROWS");
 
-  static async onGet(req: Request): Promise<Response> {
+class RowsApiRouteHandler extends RouteHandler {
+  static override type = RouteType.METHOD;
+
+  static override async onGet(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -21,7 +24,12 @@ class RowsApiRouteHandler extends RouteHandler {
     const params = (req as any).params || {};
     const tableName = params.table as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiRowsLogger.warn(
+        `GET /api/db/tables/${tableName}/rows table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
     const queryResult = await table.listRows(parseQueryParams(req));
     return jsonResponse({
@@ -30,7 +38,7 @@ class RowsApiRouteHandler extends RouteHandler {
     });
   }
 
-  static async onPost(req: Request): Promise<Response> {
+  static override async onPost(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -39,7 +47,12 @@ class RowsApiRouteHandler extends RouteHandler {
     const params = (req as any).params || {};
     const tableName = params.table as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiRowsLogger.warn(
+        `POST /api/db/tables/${tableName}/rows table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
     const parsedBody = await parseJsonBody<Record<string, unknown>>(req);
     if (!parsedBody.successful || !parsedBody.data)

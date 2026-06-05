@@ -1,35 +1,16 @@
 import { dbManager } from "../../index.js";
+import { Logger } from "../../logger.js";
+import { isSyncCapableTable, type SyncPayload } from "../../database/base.js";
 import {
   checkAuth,
   jsonResponse,
   parseJsonBody,
-  textResponse
+  textResponse,
+  valueIsDefined
 } from "../../util.js";
 import { RouteHandler, RouteType } from "../index.js";
 
-type SyncOperation<ValueType = unknown> =
-  | { op: "set"; key: string; value: ValueType }
-  | { op: "delete"; key: string }
-  | { op: "clear" };
-
-type SyncPayload<ValueType = unknown> = {
-  memory?: Record<string, ValueType>;
-  ops?: SyncOperation<ValueType>[];
-  baseVersion?: number;
-  mode?: "incremental" | "overwrite" | "reconcile";
-};
-
-type SyncCapableTable = {
-  syncKeyValueState<ValueType = unknown>(
-    payload: SyncPayload<ValueType>
-  ): {
-    version: number;
-    previousVersion: number;
-    totalKeys: number;
-    state: Record<string, ValueType>;
-  };
-  getSyncVersion(): number;
-};
+const ApiSyncLogger = new Logger("API_SYNC");
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -40,47 +21,46 @@ function parseSyncPayload(payload: unknown): {
   error?: string;
   data?: SyncPayload;
 } {
-  if (!isObject(payload)) {
+  if (!isObject(payload))
     return {
       successful: false,
       error: "Malformed body: expected a JSON object"
     };
-  }
 
   const { memory, ops, baseVersion, mode } = payload;
 
-  if (memory !== undefined && !isObject(memory)) {
+  if (!valueIsDefined(memory) || !isObject(memory))
     return {
       successful: false,
       error: "Malformed body: memory must be an object"
     };
-  }
 
-  if (ops !== undefined && !Array.isArray(ops)) {
-    return { successful: false, error: "Malformed body: ops must be an array" };
-  }
+  if (!valueIsDefined(ops) || !Array.isArray(ops))
+    return {
+      successful: false,
+      error: "Malformed body: ops must be an array"
+    };
 
   if (
-    baseVersion !== undefined &&
-    (!Number.isInteger(baseVersion) || baseVersion < 0)
-  ) {
+    !valueIsDefined(baseVersion) ||
+    !Number.isInteger(baseVersion) ||
+    baseVersion < 0
+  )
     return {
       successful: false,
       error: "Malformed body: baseVersion must be a non-negative integer"
     };
-  }
 
   if (
-    mode !== undefined &&
+    valueIsDefined(mode) &&
     mode !== "incremental" &&
     mode !== "overwrite" &&
     mode !== "reconcile"
-  ) {
+  )
     return {
       successful: false,
       error: "Malformed body: mode must be incremental, overwrite, or reconcile"
     };
-  }
 
   if (ops) {
     for (let index = 0; index < ops.length; index += 1) {
@@ -132,35 +112,18 @@ function parseSyncPayload(payload: unknown): {
   return {
     successful: true,
     data: {
-      memory: memory as Record<string, unknown> | undefined,
-      ops: ops as SyncOperation[] | undefined,
-      baseVersion: baseVersion as number | undefined,
-      mode: mode as "incremental" | "overwrite" | "reconcile" | undefined
+      memory: memory,
+      ops: ops,
+      baseVersion: baseVersion,
+      mode: mode
     }
   };
 }
 
-function asSyncCapableTable(table: unknown): SyncCapableTable | undefined {
-  if (!isObject(table)) return undefined;
-
-  const syncKeyValueState = (table as Record<string, unknown>)
-    .syncKeyValueState;
-  const getSyncVersion = (table as Record<string, unknown>).getSyncVersion;
-
-  if (
-    typeof syncKeyValueState !== "function" ||
-    typeof getSyncVersion !== "function"
-  ) {
-    return undefined;
-  }
-
-  return table as SyncCapableTable;
-}
-
 class SyncApiRouteHandler extends RouteHandler {
-  static type = RouteType.METHOD;
+  static override type = RouteType.METHOD;
 
-  static onGet(req: Request): Promise<Response> | Response {
+  static override onGet(req: Request): Promise<Response> | Response {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -169,10 +132,14 @@ class SyncApiRouteHandler extends RouteHandler {
     const params = (req as any).params || {};
     const tableName = params.table as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiSyncLogger.warn(
+        `GET /api/db/tables/${tableName}/sync table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
-    const syncTable = asSyncCapableTable(table);
-    if (!syncTable) {
+    if (!isSyncCapableTable(table)) {
       return textResponse(
         "Sync is not supported for this database table implementation",
         501
@@ -181,11 +148,11 @@ class SyncApiRouteHandler extends RouteHandler {
 
     return jsonResponse({
       tableName,
-      version: syncTable.getSyncVersion()
+      version: table.getSyncVersion()
     });
   }
 
-  static async onPost(req: Request): Promise<Response> {
+  static override async onPost(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -194,10 +161,14 @@ class SyncApiRouteHandler extends RouteHandler {
     const params = (req as any).params || {};
     const tableName = params.table as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiSyncLogger.warn(
+        `POST /api/db/tables/${tableName}/sync table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
-    const syncTable = asSyncCapableTable(table);
-    if (!syncTable) {
+    if (!isSyncCapableTable(table)) {
       return textResponse(
         "Sync is not supported for this database table implementation",
         501
@@ -214,7 +185,7 @@ class SyncApiRouteHandler extends RouteHandler {
     }
 
     try {
-      const result = syncTable.syncKeyValueState(syncPayload.data);
+      const result = table.syncKeyValueState(syncPayload.data);
       return jsonResponse({
         tableName,
         mode:

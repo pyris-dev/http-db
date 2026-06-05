@@ -6,12 +6,15 @@ import {
   parseJsonBody,
   textResponse
 } from "../../util.js";
+import { Logger } from "../../logger.js";
 import { RouteHandler, RouteType } from "../index.js";
 
-class RowApiRouteHandler extends RouteHandler {
-  static type = RouteType.METHOD;
+const ApiRowLogger = new Logger("API_ROW");
 
-  static async onGet(req: Request): Promise<Response> {
+class RowApiRouteHandler extends RouteHandler {
+  static override type = RouteType.METHOD;
+
+  static override async onGet(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -21,15 +24,25 @@ class RowApiRouteHandler extends RouteHandler {
     const tableName = params.table as string;
     const rowId = params.row as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiRowLogger.warn(
+        `GET /api/db/tables/${tableName}/rows/${rowId} table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
     const row = await table.getRow(rowId);
-    if (!row) return textResponse("Row not found", 404);
+    if (!row) {
+      ApiRowLogger.warn(
+        `GET /api/db/tables/${tableName}/rows/${rowId} row not found`
+      );
+      return textResponse("Row not found", 404);
+    }
 
     return jsonResponse(row.toJSON());
   }
 
-  static async onPut(req: Request): Promise<Response> {
+  static override async onPut(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -39,10 +52,20 @@ class RowApiRouteHandler extends RouteHandler {
     const tableName = params.table as string;
     const rowId = params.row as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiRowLogger.warn(
+        `PUT /api/db/tables/${tableName}/rows/${rowId} table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
     const existingRow = await table.getRow(rowId);
-    if (!existingRow) return textResponse("Row not found", 404);
+    if (!existingRow) {
+      ApiRowLogger.warn(
+        `PUT /api/db/tables/${tableName}/rows/${rowId} row not found`
+      );
+      return textResponse("Row not found", 404);
+    }
 
     const parsedBody = await parseJsonBody<Record<string, unknown>>(req);
     if (!parsedBody.successful || !parsedBody.data)
@@ -59,7 +82,7 @@ class RowApiRouteHandler extends RouteHandler {
     return jsonResponse(updatedRow.toJSON());
   }
 
-  static async onDelete(req: Request): Promise<Response> {
+  static override async onDelete(req: Request): Promise<Response> {
     if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
 
     if (!dbManager.isConnected())
@@ -69,10 +92,20 @@ class RowApiRouteHandler extends RouteHandler {
     const tableName = params.table as string;
     const rowId = params.row as string;
     const table = dbManager.getTable(tableName);
-    if (!table) return textResponse("Table not found", 404);
+    if (!table) {
+      ApiRowLogger.warn(
+        `DELETE /api/db/tables/${tableName}/rows/${rowId} table not found`
+      );
+      return textResponse("Table not found", 404);
+    }
 
     const row = await table.getRow(rowId);
-    if (!row) return textResponse("Row not found", 404);
+    if (!row) {
+      ApiRowLogger.warn(
+        `DELETE /api/db/tables/${tableName}/rows/${rowId} row not found`
+      );
+      return textResponse("Row not found", 404);
+    }
 
     await table.deleteRow(rowId);
     return jsonResponse({ message: "Row deleted", id: rowId, tableName });

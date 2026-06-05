@@ -1,4 +1,6 @@
-import { config } from "../index.js";
+import { Logger } from "../logger.js";
+
+const RouteInterceptorLogger = new Logger("ROUTE_INT");
 
 export type RouteHandlerCallable = (
   req: Request
@@ -58,7 +60,7 @@ export class RouteHandler {
     req: Request,
     route: RouteHandlerCallable
   ): Response | Promise<Response> {
-    if (!config.DEBUG_MODE) {
+    if ((process.env.DEBUG_MODE ?? "").toLowerCase() !== "true") {
       return route(req);
     }
 
@@ -66,7 +68,7 @@ export class RouteHandler {
     const { pathname, search } = new URL(req.url);
     const routeTarget = `${pathname}${search}`;
 
-    console.log(`[ROUTE][IN] ${req.method} ${routeTarget}`);
+    RouteInterceptorLogger.debug(`IN ${req.method} ${routeTarget}`);
 
     try {
       const result = route(req);
@@ -75,8 +77,8 @@ export class RouteHandler {
         return result
           .then((response) => {
             const durationMs = Math.round(performance.now() - startedAt);
-            console.log(
-              `[ROUTE][OUT] ${req.method} ${routeTarget} -> ${response.status} (${durationMs}ms)`
+            RouteInterceptorLogger.debug(
+              `OUT ${req.method} ${routeTarget} -> ${response.status} (${durationMs}ms)`
             );
             return response;
           })
@@ -84,23 +86,23 @@ export class RouteHandler {
             const durationMs = Math.round(performance.now() - startedAt);
             const message =
               error instanceof Error ? error.message : String(error);
-            console.error(
-              `[ROUTE][ERR] ${req.method} ${routeTarget} (${durationMs}ms): ${message}`
+            RouteInterceptorLogger.debug(
+              `ERR ${req.method} ${routeTarget} (${durationMs}ms): ${message}`
             );
             throw error;
           });
       }
 
       const durationMs = Math.round(performance.now() - startedAt);
-      console.log(
-        `[ROUTE][OUT] ${req.method} ${routeTarget} -> ${result.status} (${durationMs}ms)`
+      RouteInterceptorLogger.debug(
+        `OUT ${req.method} ${routeTarget} -> ${result.status} (${durationMs}ms)`
       );
       return result;
     } catch (error) {
       const durationMs = Math.round(performance.now() - startedAt);
       const message = error instanceof Error ? error.message : String(error);
-      console.error(
-        `[ROUTE][ERR] ${req.method} ${routeTarget} (${durationMs}ms): ${message}`
+      RouteInterceptorLogger.debug(
+        `ERR ${req.method} ${routeTarget} (${durationMs}ms): ${message}`
       );
       throw error;
     }

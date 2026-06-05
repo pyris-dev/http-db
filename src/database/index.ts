@@ -1,6 +1,5 @@
 import type { Config } from "../config.js";
-import type { BaseDatabaseManager, BaseRow, BaseTable } from "./base.js";
-import { BaseRow } from "./base.js";
+import { BaseRow, type BaseDatabaseManager, type BaseTable } from "./base.js";
 import { SqliteDatabaseManager } from "./sqlite.js";
 
 export function getDatabaseManagerClass(
@@ -16,6 +15,8 @@ export function getDatabaseManagerClass(
     case "sqlite":
       return new SqliteDatabaseManager(config.DATABASE_NAME!, BaseRow);
     default:
-      throw new Error(`Unsupported database platform: ${config.DATABASE_TYPE}`);
+      throw new Error(
+        `Unsupported database platform: ${config.DATABASE_PLATFORM}`
+      );
   }
 }

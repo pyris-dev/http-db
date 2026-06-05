@@ -6,28 +6,24 @@ import {
   type ShortTableData,
   type FullTableData,
   type QueryParams,
-  type QueryResult
+  type QueryResult,
+  type SyncPayload,
+  type SyncResult,
+  type SyncCapableTable
 } from "./base.js";
+import { Logger } from "../logger.js";
+
+const SqliteStorageLogger = new Logger("SQLITE_DB");
+const SqliteSyncLogger = new Logger("SQLITE_SYN");
 
 type RowConstructor<RowType extends BaseRow> = new (
   id: string,
   data?: any
 ) => RowType;
 
-function isDebugModeEnabled(): boolean {
-  return (process.env.DEBUG_MODE ?? "").toLowerCase() === "true";
-}
-
-function logDbOperation(message: string): void {
-  if (isDebugModeEnabled()) {
-    console.log(`[DB][OP] ${message}`);
-  }
-}
-
 function validateTableName(name: string) {
-  if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+  if (!/^[a-zA-Z0-9_]+$/.test(name))
     throw new Error(`Invalid table name: ${name}`);
-  }
 }
 
 function serializeData(data: any): string {
@@ -58,7 +54,10 @@ function paginate<T>(items: T[], query: QueryParams): QueryResult<T> {
   };
 }
 
-class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
+class SqliteTable<RowType extends BaseRow>
+  extends BaseTable<RowType>
+  implements SyncCapableTable
+{
   public db: Database;
   public tableName: string;
   private RowClass: RowConstructor<RowType>;
@@ -99,12 +98,12 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
   createRow(data?: Partial<RowType>): RowType {
     const input = { ...(data as Record<string, unknown> | undefined) };
     const id =
-      typeof input?.id === "string" && input.id.trim()
-        ? input.id
+      typeof input?.["id"] === "string" && input["id"].trim()
+        ? input["id"]
         : crypto.randomUUID();
 
     if (input) {
-      delete input.id;
+      delete input["id"];
     }
 
     return new this.RowClass(id, input);
@@ -115,7 +114,9 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
       .prepare(`INSERT INTO "${this.tableName}" (id, data) VALUES (?1, ?2)`)
       .run(row.id, serializeData(row.data));
     this.rows.set(row.id, row);
-    logDbOperation(`insert row table=${this.tableName} id=${row.id}`);
+    SqliteStorageLogger.audit(
+      `insert row table=${this.tableName} id=${row.id}`
+    );
   }
 
   async getRow(id: string): Promise<RowType | undefined> {
@@ -132,13 +133,15 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
       .prepare(`UPDATE "${this.tableName}" SET data = ?1 WHERE id = ?2`)
       .run(serializeData(row.data), row.id);
     this.rows.set(row.id, row);
-    logDbOperation(`update row table=${this.tableName} id=${row.id}`);
+    SqliteStorageLogger.audit(
+      `update row table=${this.tableName} id=${row.id}`
+    );
   }
 
   async deleteRow(id: string): Promise<void> {
     this.db.prepare(`DELETE FROM "${this.tableName}" WHERE id = ?1`).run(id);
     this.rows.delete(id);
-    logDbOperation(`delete row table=${this.tableName} id=${id}`);
+    SqliteStorageLogger.audit(`delete row table=${this.tableName} id=${id}`);
   }
 
   async listRows(query: QueryParams = {}): Promise<QueryResult<RowType>> {
@@ -170,21 +173,9 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
     };
   }
 
-  syncKeyValueState<ValueType = unknown>(payload: {
-    memory?: Record<string, ValueType>;
-    ops?: Array<
-      | { op: "set"; key: string; value: ValueType }
-      | { op: "delete"; key: string }
-      | { op: "clear" }
-    >;
-    baseVersion?: number;
-    mode?: "incremental" | "overwrite" | "reconcile";
-  }): {
-    version: number;
-    previousVersion: number;
-    totalKeys: number;
-    state: Record<string, ValueType>;
-  } {
+  syncKeyValueState<ValueType = unknown>(
+    payload: SyncPayload<ValueType>
+  ): SyncResult<ValueType> {
     const db = this.db;
     const metadataTable = "__http_db_sync_meta";
 
@@ -206,6 +197,9 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
         Number.isFinite(payload.baseVersion) &&
         payload.baseVersion !== currentVersion
       ) {
+        SqliteSyncLogger.warn(
+          `table=${this.tableName} version conflict expected=${payload.baseVersion} current=${currentVersion}`
+        );
         throw new Error(
           `Version conflict: expected ${payload.baseVersion}, current ${currentVersion}`
         );
@@ -290,7 +284,10 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
 
       db.exec("COMMIT");
 
-      logDbOperation(
+      SqliteSyncLogger.info(
+        `table=${this.tableName} mode=${mode} version=${nextVersion} keys=${state.size}`
+      );
+      SqliteStorageLogger.audit(
         `sync table=${this.tableName} mode=${mode} previousVersion=${currentVersion} version=${nextVersion} ops=${ops.length} keys=${state.size}`
       );
 
@@ -302,6 +299,9 @@ class SqliteTable<RowType extends BaseRow> extends BaseTable<RowType> {
       };
     } catch (error) {
       db.exec("ROLLBACK");
+      SqliteSyncLogger.error(
+        `table=${this.tableName} rollback: ${error instanceof Error ? error.message : String(error)}`
+      );
       throw error;
     }
   }
@@ -383,6 +383,9 @@ class SqliteDatabaseManager<
 
       // Only load tables that match the row storage shape used by this server.
       if (!columnNames.has("id") || !columnNames.has("data")) {
+        SqliteStorageLogger.warn(
+          `skip table=${tableInfo.name} reason=missing id/data columns`
+        );
         continue;
       }
 
@@ -394,8 +397,8 @@ class SqliteDatabaseManager<
       // populate in-memory rows cache for this table
       await table.fetchExistingRows();
       this.tables.set(tableInfo.name, table);
-      logDbOperation(
-        `load table table=${tableInfo.name} rows=${table.rows.size}`
+      SqliteStorageLogger.info(
+        `loaded table=${tableInfo.name} rowCount=${table.rows.size}`
       );
     }
   }
@@ -404,7 +407,8 @@ class SqliteDatabaseManager<
     if (!this.db) throw new Error("Database not connected");
     const table = new SqliteTable<RowType>(this.db, name, this.RowClass);
     this.tables.set(name, table);
-    logDbOperation(`create table table=${name}`);
+    SqliteStorageLogger.info(`create table=${name}`);
+    SqliteStorageLogger.audit(`create table table=${name}`);
     return table;
   }
 
@@ -416,7 +420,8 @@ class SqliteDatabaseManager<
     if (!this.db) throw new Error("Database not connected");
     this.db.prepare(`DROP TABLE IF EXISTS "${name}"`).run();
     this.tables.delete(name);
-    logDbOperation(`delete table table=${name}`);
+    SqliteStorageLogger.info(`delete table=${name}`);
+    SqliteStorageLogger.audit(`delete table table=${name}`);
   }
 
   listTables(query: QueryParams = {}): QueryResult<ShortTableData> {

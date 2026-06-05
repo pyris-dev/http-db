@@ -18,24 +18,27 @@
     "declarationMap": true,
 
     // Stricter Typechecking Options
+    "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-  "strictNullChecks": true,
+    "strictNullChecks": true,
+    "useUnknownInCatchVariables": true,
 
     // Style Options
     "noImplicitReturns": true,
-    //"noImplicitOverride": true,
+    "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     // "noPropertyAccessFromIndexSignature": true,
 
     // Recommended Options
-    //"strict": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
+    "forceConsistentCasingInFileNames": true,
+    "noEmitOnError": true,
     "skipLibCheck": true,
   }
 }

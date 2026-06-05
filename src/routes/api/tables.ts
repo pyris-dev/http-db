@@ -1,4 +1,5 @@
 import { dbManager } from "../../index.js";
+import { Logger } from "../../logger.js";
 import {
   checkAuth,
   jsonResponse,
@@ -8,15 +9,20 @@ import {
 } from "../../util.js";
 import { RouteHandler, RouteType } from "../index.js";
 
+const ApiTablesLogger = new Logger("API_TABLES");
+
 /**
  * Tables API Route Handler
  * This handler manages API requests related to database tables.
  */
 class TablesApiRouteHandler extends RouteHandler {
-  static type = RouteType.METHOD;
+  static override type = RouteType.METHOD;
 
-  static onGet(req: Request): Promise<Response> | Response {
-    if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
+  static override onGet(req: Request): Promise<Response> | Response {
+    if (checkAuth(req) === false) {
+      ApiTablesLogger.warn("GET /api/db/tables unauthorized");
+      return textResponse("Unauthorized", 401);
+    }
 
     if (!dbManager.isConnected())
       return textResponse("Database not connected", 500);
@@ -26,8 +32,11 @@ class TablesApiRouteHandler extends RouteHandler {
     return jsonResponse(queryResult);
   }
 
-  static async onPost(req: Request): Promise<Response> {
-    if (checkAuth(req) === false) return textResponse("Unauthorized", 401);
+  static override async onPost(req: Request): Promise<Response> {
+    if (checkAuth(req) === false) {
+      ApiTablesLogger.warn("POST /api/db/tables unauthorized");
+      return textResponse("Unauthorized", 401);
+    }
 
     const parsedBody = await parseJsonBody<{ tableName: string }>(req, [
       "tableName"

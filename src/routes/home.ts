@@ -6,9 +6,9 @@ export enum WebRoutes {
 }
 
 class HomeRouteHandler extends RouteHandler {
-  static type = RouteType.REQUEST;
+  static override type = RouteType.REQUEST;
 
-  static onRequest(): Promise<Response> | Response {
+  static override onRequest(): Promise<Response> | Response {
     return new Response(
       Bun.file(new URL("../../requestor.html", import.meta.url)),
       {
