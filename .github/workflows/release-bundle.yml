@@ -1,0 +1,100 @@
+name: Release Bundle
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows-x64
+            artifact_ext: .exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            artifact_ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundle
+        run: npm run bundle
+
+      - name: Resolve artifact metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $app = $pkg.name
+          $version = $pkg.version
+          $rawArtifact = "bundle/$app-$version${{ matrix.artifact_ext }}"
+          $releaseArtifact = "bundle/$app-$version-${{ matrix.platform }}${{ matrix.artifact_ext }}"
+
+          if (!(Test-Path $rawArtifact)) {
+            throw "Expected artifact '$rawArtifact' was not found."
+          }
+
+          Copy-Item $rawArtifact $releaseArtifact -Force
+
+          "app_name=$app" >> $env:GITHUB_OUTPUT
+          "app_version=$version" >> $env:GITHUB_OUTPUT
+          "artifact_path=$releaseArtifact" >> $env:GITHUB_OUTPUT
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.platform }}
+          path: ${{ steps.meta.outputs.artifact_path }}
+          if-no-files-found: error
+
+  create-release:
+    needs: build-bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          APP_NAME=$(node -p "require('./package.json').name")
+          APP_VERSION=$(node -p "require('./package.json').version")
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-artifacts-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create release and upload artifact
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.meta.outputs.app_version) }}
+          name: ${{ steps.meta.outputs.app_name }} v${{ steps.meta.outputs.app_version }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/*
