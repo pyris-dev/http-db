@@ -17,17 +17,17 @@ Features
 **Option A: Download binary executable**
 
 ```bash
-# Download the latest release
-curl -L -o http-db https://github.com/Nathan93705/http-db/releases
-chmod +x http-db
-./http-db
+# Download from the latest GitHub release assets:
+# - http-db-<version>-windows-x64.exe
+# - http-db-<version>-linux-x64
+# https://github.com/pyris-dev/http-db/releases/latest
 ```
 
 **Option B: Build and run from source**
 
 ```bash
 # Clone the repository
-git clone https://github.com/Nathan93705/http-db.git
+git clone https://github.com/pyris-dev/http-db.git
 cd http-db
 
 # Install dependencies and start
@@ -42,7 +42,36 @@ Open the root URL in a browser to use the built-in request console.
 ## Scripts
 
 - `npm run dev`: start the Bun server in development mode.
-- `npm run bundle`: compile a standalone executable to `./bundle/app`.
+- `npm run build`: compile TypeScript to `./dist`.
+- `npm run bundle`: compile a standalone executable via `bundle.ts`.
+  - Output path: `./bundle/http-db-<version>.exe` on Windows.
+  - Output path: `./bundle/http-db-<version>` on Linux.
+- `npm run lint`: run ESLint.
+- `npm run lint:fix`: auto-fix ESLint issues where safe.
+
+## Configuration
+
+- Runtime configuration is loaded from `config.yaml` in the current working directory.
+- If `config.yaml` does not exist, the server auto-generates one with defaults and comments.
+- If `config.yaml` exists but is missing required options, startup fails with a clear config error.
+- `AUTH_KEY` is conditionally required when `AUTH_ENABLED: true`.
+
+Example:
+
+```yaml
+AUTH_ENABLED: true
+AUTH_KEY: yoursupersecretkey
+DATABASE_TYPE: embedded
+DATABASE_PLATFORM: sqlite
+DATABASE_NAME: database.db
+```
+
+## Releases
+
+- GitHub Actions builds and publishes bundled binaries on version tags (`v*`).
+- Release assets include both Windows and Ubuntu builds:
+  - `http-db-<version>-windows-x64.exe`
+  - `http-db-<version>-linux-x64`
 
 ## Try it — quick smoke test
 
@@ -137,9 +166,9 @@ curl -s -X DELETE http://localhost:3000/api/db/tables/users | jq
 
 ## Auth
 
-- A simple Bearer token can be enabled in the `.env` via the `AUTH_ENABLED` constant.
+- A simple Bearer token can be enabled in `config.yaml` via `AUTH_ENABLED`.
 - Default: `AUTH_ENABLED` is `false` (auth disabled).
-- To enable auth, set `AUTH_ENABLED` to `true` and `AUTH_KEY` to a string (for example `AUTH_KEY = 'secret-token'`) and restart the server. Then include the header:
+- To enable auth, set `AUTH_ENABLED: true` and `AUTH_KEY: secret-token`, then restart the server. Include the header:
 
 ```
 Authorization: Bearer secret-token
@@ -166,7 +195,7 @@ Authorization: Bearer secret-token
 
 ## Route debugging
 
-- Set `DEBUG_MODE=true` in your environment to print request and operation logs.
+- Set `DEBUG_MODE: true` in `config.yaml` to print request and operation logs.
 - Each request logs:
   - inbound line: method + path/query
   - outbound line: method + path/query + status + duration in ms
