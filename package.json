@@ -7,7 +7,7 @@
     "dev": "bun run ./src/index.ts",
     "build": "tsc",
     "start": "bun run ./dist/index.js",
-    "bundle": "bun build --compile --output ./bundle/app",
+    "bundle": "bun run ./bundle.ts",
     "clean": "rm -rf ./dist ./bundle",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
@@ -18,7 +18,9 @@
   },
   "author": "",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
     "@types/bun": "^1.3.0",

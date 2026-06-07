@@ -1,15 +1,25 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import localPlugin from "./eslint-plugins/local-plugin.js";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "bundle/**", "database/**", "node_modules/**"]
+    ignores: [
+      "dist/**",
+      "bundle/**",
+      "database/**",
+      "node_modules/**",
+      "bundle.ts"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
     files: ["**/*.ts"],
+    plugins: {
+      local: localPlugin
+    },
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
@@ -28,7 +38,8 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }
-      ]
+      ],
+      "local/no-single-statement-if-block": "error"
     }
   }
 );

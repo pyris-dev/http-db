@@ -60,9 +60,8 @@ export class RouteHandler {
     req: Request,
     route: RouteHandlerCallable
   ): Response | Promise<Response> {
-    if ((process.env.DEBUG_MODE ?? "").toLowerCase() !== "true") {
+    if ((process.env.DEBUG_MODE ?? "").toLowerCase() !== "true")
       return route(req);
-    }
 
     const startedAt = performance.now();
     const { pathname, search } = new URL(req.url);
@@ -73,7 +72,7 @@ export class RouteHandler {
     try {
       const result = route(req);
 
-      if (result instanceof Promise) {
+      if (result instanceof Promise)
         return result
           .then((response) => {
             const durationMs = Math.round(performance.now() - startedAt);
@@ -91,7 +90,6 @@ export class RouteHandler {
             );
             throw error;
           });
-      }
 
       const durationMs = Math.round(performance.now() - startedAt);
       RouteInterceptorLogger.debug(

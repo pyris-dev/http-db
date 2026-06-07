@@ -87,12 +87,10 @@ class SqliteTable<RowType extends BaseRow>
     const rows = this.db
       .prepare(`SELECT id, data FROM "${this.tableName}" ORDER BY rowid DESC`)
       .all() as { id: string; data: string }[];
-    for (const row of rows) {
-      this.rows.set(
+    for (const row of rows) this.rows.set(
         row.id,
         new this.RowClass(row.id, deserializeData(row.data))
       );
-    }
   }
 
   createRow(data?: Partial<RowType>): RowType {
@@ -102,9 +100,7 @@ class SqliteTable<RowType extends BaseRow>
         ? input["id"]
         : crypto.randomUUID();
 
-    if (input) {
-      delete input["id"];
-    }
+    if (input) delete input["id"];
 
     return new this.RowClass(id, input);
   }
@@ -217,20 +213,16 @@ class SqliteTable<RowType extends BaseRow>
       const state = new Map<string, ValueType>();
       for (const row of rows) {
         const parsed = deserializeData(row.data);
-        if (parsed && typeof parsed === "object" && "value" in parsed) {
+        if (parsed && typeof parsed === "object" && "value" in parsed)
           state.set(row.id, (parsed as { value: ValueType }).value);
-        } else {
-          state.set(row.id, parsed as ValueType);
-        }
+        else state.set(row.id, parsed as ValueType);
       }
 
       if (mode === "overwrite") {
         state.clear();
-        if (hasMemory) {
-          for (const [key, value] of Object.entries(payload.memory!)) {
+        if (hasMemory)
+          for (const [key, value] of Object.entries(payload.memory!))
             state.set(key, value as ValueType);
-          }
-        }
       } else {
         for (const operation of ops) {
           if (operation.op === "clear") {
@@ -248,9 +240,7 @@ class SqliteTable<RowType extends BaseRow>
 
         if (mode === "reconcile" && hasMemory) {
           state.clear();
-          for (const [key, value] of Object.entries(payload.memory!)) {
-            state.set(key, value as ValueType);
-          }
+          for (const [key, value] of Object.entries(payload.memory!)) state.set(key, value as ValueType);
         }
       }
 
@@ -258,9 +248,7 @@ class SqliteTable<RowType extends BaseRow>
       const insertStmt = db.prepare(
         `INSERT INTO "${this.tableName}" (id, data) VALUES (?1, ?2)`
       );
-      for (const [key, value] of state.entries()) {
-        insertStmt.run(key, serializeData({ value }));
-      }
+      for (const [key, value] of state.entries()) insertStmt.run(key, serializeData({ value }));
 
       const nextVersion = currentVersion + 1;
       db.prepare(
@@ -272,15 +260,13 @@ class SqliteTable<RowType extends BaseRow>
       ).run(this.tableName, nextVersion);
 
       this.rows.clear();
-      for (const [key, value] of state.entries()) {
-        this.rows.set(
+      for (const [key, value] of state.entries()) this.rows.set(
           key,
           new this.RowClass(key, { value } as unknown as Record<
             string,
             unknown
           >)
         );
-      }
 
       db.exec("COMMIT");
 

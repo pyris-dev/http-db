@@ -1,9 +1,10 @@
 # Ignore environment variables file
-.env
+config.yaml
 
 # Ignore dependencies and build output
 node_modules
 dist
+bundle
 
 # Ignore database and log files
 *.sqlite

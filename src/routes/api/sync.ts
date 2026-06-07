@@ -62,52 +62,46 @@ function parseSyncPayload(payload: unknown): {
       error: "Malformed body: mode must be incremental, overwrite, or reconcile"
     };
 
-  if (ops) {
-    for (let index = 0; index < ops.length; index += 1) {
+  if (ops) for (let index = 0; index < ops.length; index += 1) {
       const op = ops[index];
-      if (!isObject(op) || typeof op.op !== "string") {
+      if (!isObject(op) || typeof op.op !== "string")
         return {
           successful: false,
           error: `Malformed body: ops[${index}] must be an operation object`
         };
-      }
 
       if (op.op === "set") {
-        if (typeof op.key !== "string" || !op.key.trim()) {
+        if (typeof op.key !== "string" || !op.key.trim())
           return {
             successful: false,
             error: `Malformed body: ops[${index}].key must be a non-empty string`
           };
-        }
-        if (!("value" in op)) {
+        if (!("value" in op))
           return {
             successful: false,
             error: `Malformed body: ops[${index}].value is required for set`
           };
-        }
+
         continue;
       }
 
       if (op.op === "delete") {
-        if (typeof op.key !== "string" || !op.key.trim()) {
+        if (typeof op.key !== "string" || !op.key.trim())
           return {
             successful: false,
             error: `Malformed body: ops[${index}].key must be a non-empty string`
           };
-        }
+
         continue;
       }
 
-      if (op.op === "clear") {
-        continue;
-      }
+      if (op.op === "clear") continue;
 
       return {
         successful: false,
         error: `Malformed body: unsupported op '${op.op}' at ops[${index}]`
       };
     }
-  }
 
   return {
     successful: true,
@@ -139,12 +133,11 @@ class SyncApiRouteHandler extends RouteHandler {
       return textResponse("Table not found", 404);
     }
 
-    if (!isSyncCapableTable(table)) {
+    if (!isSyncCapableTable(table))
       return textResponse(
         "Sync is not supported for this database table implementation",
         501
       );
-    }
 
     return jsonResponse({
       tableName,
@@ -168,21 +161,19 @@ class SyncApiRouteHandler extends RouteHandler {
       return textResponse("Table not found", 404);
     }
 
-    if (!isSyncCapableTable(table)) {
+    if (!isSyncCapableTable(table))
       return textResponse(
         "Sync is not supported for this database table implementation",
         501
       );
-    }
 
     const parsedBody = await parseJsonBody<unknown>(req);
     if (!parsedBody.successful)
       return textResponse(parsedBody.error || "Malformed JSON body", 400);
 
     const syncPayload = parseSyncPayload(parsedBody.data);
-    if (!syncPayload.successful || !syncPayload.data) {
+    if (!syncPayload.successful || !syncPayload.data)
       return textResponse(syncPayload.error || "Malformed sync payload", 400);
-    }
 
     try {
       const result = table.syncKeyValueState(syncPayload.data);
@@ -196,9 +187,9 @@ class SyncApiRouteHandler extends RouteHandler {
       });
     } catch (error) {
       const message = (error as Error).message;
-      if (message.startsWith("Version conflict:")) {
+      if (message.startsWith("Version conflict:"))
         return textResponse(message, 409);
-      }
+
       return textResponse(message, 400);
     }
   }

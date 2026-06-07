@@ -70,9 +70,7 @@ export class Logger {
     const levelTag = `[${level}]`.padEnd(LEVEL_WIDTH + 2);
     const scopeTag = `[${this.scope}]`.padEnd(SCOPE_WIDTH + 2);
     const plain = `${scopeTag} ${levelTag} ${message}`;
-    if (!shouldUseColor()) {
-      return plain;
-    }
+    if (!shouldUseColor()) return plain;
 
     const levelColor = LEVEL_COLORS[level] ?? "";
     const coloredLevel = `${ANSI_BOLD}${levelColor}${levelTag}${ANSI_RESET}`;

@@ -21,11 +21,11 @@ export function checkAuth(req: Request): boolean {
     );
   const provided = req.headers.get("authorization") || "";
   const authorized = provided === `Bearer ${authKey}`;
-  if (!authorized) {
+  if (!authorized)
     AuthRequestLogger.warn(
       `${req.method} ${new URL(req.url).pathname} unauthorized`
     );
-  }
+
   return authorized;
 }
 

@@ -10,11 +10,9 @@ const StartupLogger = new Logger("STARTUP");
 
 printLogHeader();
 
-// Load configuration
-export const config = loadConfig();
-
-// The DB manager instance
-export const dbManager = getDatabaseManagerClass(config);
+// Initialized during startup in main IIFE.
+export let config: ReturnType<typeof loadConfig>;
+export let dbManager: ReturnType<typeof getDatabaseManagerClass>;
 
 function getDatabaseConnectionSummary(): string {
   if (config.DATABASE_TYPE === "embedded")
@@ -25,8 +23,25 @@ function getDatabaseConnectionSummary(): string {
   return `type=${config.DATABASE_PLATFORM} url=${config.DATABASE_PLATFORM}://${host}${port}`;
 }
 
+async function keepProcessOpenOnFatalError(): Promise<never> {
+  StartupLogger.error("Fatal startup error. Press Ctrl+C to exit.");
+  if (process.stdin.isTTY) process.stdin.resume();
+
+  setInterval(
+    () => {
+      // Keep the process alive so startup errors remain visible in standalone execution.
+    },
+    60 * 60 * 1000
+  );
+
+  return await new Promise<never>(() => {});
+}
+
 (async () => {
   try {
+    config = loadConfig();
+    dbManager = getDatabaseManagerClass(config);
+
     StartupLogger.info("Connecting to database");
 
     // Connect to the database
@@ -55,6 +70,6 @@ function getDatabaseConnectionSummary(): string {
     StartupLogger.info(`Server running at ${server.url}`);
   } catch (error) {
     StartupLogger.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    await keepProcessOpenOnFatalError();
   }
 })();

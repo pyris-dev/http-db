@@ -67,9 +67,7 @@ export interface SyncCapableTable {
 }
 
 export function isSyncCapableTable(table: unknown): table is SyncCapableTable {
-  if (typeof table !== "object" || table === null) {
-    return false;
-  }
+  if (typeof table !== "object" || table === null) return false;
 
   const value = table as Record<string, unknown>;
   return (
