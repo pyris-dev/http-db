@@ -83,51 +83,54 @@ export class Logger {
    * @param level The log level for this message
    * @param message The content of the log message
    */
-  private write(level: LogLevel, message: string): void {
-    const line = this.formatLine(level, message);
+  private write(level: LogLevel, content: any): void {
+    const line = this.formatLine(
+      level,
+      typeof content === "string" ? content : JSON.stringify(content)
+    );
     if (level === "ERROR") return console.error(line);
     console.log(line);
   }
 
   /**
    * Log an informational message
-   * @param message The message content to log
+   * @param content The message content to log, can be a string or any serializable object
    */
-  public info(message: any): void {
-    this.write("INFO", JSON.stringify(message));
+  public info(content: any): void {
+    this.write("INFO", content);
   }
 
   /**
    * Log a warning message
-   * @param message The message content to log
+   * @param content The message content to log, can be a string or any serializable object
    */
-  public warn(message: any): void {
-    this.write("WARN", JSON.stringify(message));
+  public warn(content: any): void {
+    this.write("WARN", content);
   }
 
   /**
    * Log an error message
-   * @param message The message content to log
+   * @param content The message content to log, can be a string or any serializable object
    */
-  public error(message: any): void {
-    this.write("ERROR", JSON.stringify(message));
+  public error(content: any): void {
+    this.write("ERROR", content);
   }
 
   /**
    * Log an audit message (important events that should be recorded)
-   * @param message The message content to log
+   * @param content The message content to log, can be a string or any serializable object
    */
-  public audit(message: any): void {
-    this.write("AUDIT", JSON.stringify(message));
+  public audit(content: any): void {
+    this.write("AUDIT", content);
   }
 
   /**
    * Log a debug message (only shown if debug is enabled)
-   * @param message The message content to log
+   * @param content The message content to log, can be a string or any serializable object
    */
-  public debug(message: any): void {
+  public debug(content: any): void {
     if (!isDebugEnabled()) return;
 
-    this.write("DEBUG", JSON.stringify(message));
+    this.write("DEBUG", content);
   }
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse, stringify } from "yaml";
+import { Logger } from "./logger.js";
 
 /** Config value types */
 type ConfigValueType = string | number | boolean;
@@ -323,26 +324,32 @@ function loadRawConfig(): {
   return { rawConfig: parsed, created: false };
 }
 
-function validateDatabaseConfig(config: Config): void {
+function getDatabaseConfigErrors(config: Partial<Config>): string[] {
+  const errors: string[] = [];
   const validTypes = ["embedded", "server"];
   const typePlatformCombos: Record<Config["DATABASE_TYPE"], string[]> = {
     embedded: ["sqlite"],
     server: ["mongodb", "mysql"]
   };
 
-  if (!validTypes.includes(config.DATABASE_TYPE))
-    throw new Error(
+  if (config.DATABASE_TYPE && !validTypes.includes(config.DATABASE_TYPE))
+    errors.push(
       `Invalid DATABASE_TYPE: "${config.DATABASE_TYPE}". Supported types are: ${validTypes.join(", ")}`
     );
 
-  const allowedPlatforms = typePlatformCombos[config.DATABASE_TYPE];
-  if (!allowedPlatforms || !allowedPlatforms.includes(config.DATABASE_PLATFORM))
-    throw new Error(
-      `Invalid database configuration: DATABASE_TYPE='${config.DATABASE_TYPE}' does not support DATABASE_PLATFORM='${config.DATABASE_PLATFORM}'`
-    );
+  if (config.DATABASE_TYPE && config.DATABASE_PLATFORM) {
+    const allowedPlatforms = typePlatformCombos[config.DATABASE_TYPE];
+    if (
+      !allowedPlatforms ||
+      !allowedPlatforms.includes(config.DATABASE_PLATFORM)
+    )
+      errors.push(
+        `Invalid database configuration: DATABASE_TYPE='${config.DATABASE_TYPE}' does not support DATABASE_PLATFORM='${config.DATABASE_PLATFORM}'`
+      );
+  }
 
   if (config.DATABASE_TYPE === "embedded" && !config.DATABASE_NAME)
-    throw new Error(`Missing required config for sqlite: DATABASE_NAME`);
+    errors.push("Missing required config for sqlite: DATABASE_NAME");
 
   if (
     config.DATABASE_TYPE === "server" &&
@@ -351,20 +358,37 @@ function validateDatabaseConfig(config: Config): void {
       !config.DATABASE_USER ||
       !config.DATABASE_PASSWORD)
   )
-    throw new Error(
+    errors.push(
       "Missing required server database config: DATABASE_HOST, DATABASE_PORT, DATABASE_USER, and DATABASE_PASSWORD are required"
     );
+
+  return errors;
 }
 
+const ConfigLogger = new Logger("CONFIG", "\x1b[35m");
+
 /** Load and validate configuration */
-export function loadConfig(): Config {
-  const { rawConfig, created } = loadRawConfig();
-  if (created)
-    console.warn(
-      `[CONFIG] ${CONFIG_FILE_NAME} was missing. Generated a default file in ${resolve(CONFIG_FILE_NAME)}`
+export function loadConfig(): Config | null {
+  let rawConfig: Record<string, unknown>;
+  let created = false;
+
+  try {
+    ({ rawConfig, created } = loadRawConfig());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    ConfigLogger.error(message);
+    return null;
+  }
+
+  if (created) {
+    ConfigLogger.warn(`"${CONFIG_FILE_NAME}" was missing.`);
+    ConfigLogger.warn(
+      `Generated a default file in "${resolve(CONFIG_FILE_NAME)}"\n`
     );
+  }
 
   const config: Partial<Config> = {};
+  const errors: string[] = [];
 
   const entries = Object.entries(ConfigProperties).sort(
     ([, a], [, b]) =>
@@ -379,7 +403,7 @@ export function loadConfig(): Config {
         "requiredIf" in prop ? (prop.requiredIf(config) ?? false) : false;
 
       if (prop.required || conditionallyRequired)
-        throw new Error(
+        errors.push(
           `Missing required config key "${key}" in ${CONFIG_FILE_NAME}`
         );
 
@@ -387,12 +411,20 @@ export function loadConfig(): Config {
       continue;
     }
 
-    const parsedValue = parseConfigValue(rawValue, prop.type, key);
+    let parsedValue: ConfigValueType;
+    try {
+      parsedValue = parseConfigValue(rawValue, prop.type, key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(message);
+      (config as any)[key] = undefined;
+      continue;
+    }
 
     if (prop.type === String && "options" in prop) {
       const options = (prop as any).options as readonly string[] | undefined;
       if (options && !options.includes(parsedValue as string))
-        throw new Error(
+        errors.push(
           `Invalid value for "${key}": "${parsedValue}" is not one of [${options.join(", ")}]`
         );
     }
@@ -400,7 +432,13 @@ export function loadConfig(): Config {
     (config as any)[key] = parsedValue;
   }
 
-  const finalConfig = config as Config;
-  validateDatabaseConfig(finalConfig);
-  return finalConfig;
+  errors.push(...getDatabaseConfigErrors(config));
+
+  if (errors.length > 0) {
+    ConfigLogger.error(`Found ${errors.length} configuration error(s):`);
+    for (const error of errors) ConfigLogger.error(`- ${error}`);
+    return null;
+  }
+
+  return config as Config;
 }
