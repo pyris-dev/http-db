@@ -1,0 +1,115 @@
+name: Nightly Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-nightly:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            platform: windows-x64
+            artifact_ext: .exe
+          - os: ubuntu-latest
+            platform: linux-x64
+            artifact_ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundle
+        run: npm run bundle
+
+      - name: Resolve artifact metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $app = $pkg.name
+          $version = $pkg.version
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+
+          $rawArtifact = "bundle/$app-$version${{ matrix.artifact_ext }}"
+          $nightlyArtifact = "bundle/$app-nightly-$shortSha-${{ matrix.platform }}${{ matrix.artifact_ext }}"
+
+          if (!(Test-Path $rawArtifact)) {
+            throw "Expected artifact '$rawArtifact' was not found."
+          }
+
+          Copy-Item $rawArtifact $nightlyArtifact -Force
+          "app_name=$app" >> $env:GITHUB_OUTPUT
+          "app_version=$version" >> $env:GITHUB_OUTPUT
+          "artifact_path=$nightlyArtifact" >> $env:GITHUB_OUTPUT
+
+      - name: Upload nightly artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ matrix.platform }}
+          path: ${{ steps.meta.outputs.artifact_path }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-nightly-prerelease:
+    needs: build-nightly
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve nightly metadata
+        id: meta
+        shell: bash
+        run: |
+          APP_NAME=$(node -p "require('./package.json').name")
+          APP_VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "app_version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Download nightly artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nightly-*
+          path: nightly-artifacts
+          merge-multiple: true
+
+      - name: Publish rolling nightly prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly
+          name: Nightly - ${{ steps.meta.outputs.app_name }} (${{ steps.meta.outputs.short_sha }})
+          prerelease: true
+          overwrite_files: true
+          make_latest: false
+          body: |
+            Rolling nightly build for `${{ github.sha }}`.
+            
+            - Source branch: `${{ github.ref_name }}`
+            - App version: `${{ steps.meta.outputs.app_version }}`
+            - Commit: `${{ github.sha }}`
+          files: |
+            nightly-artifacts/*
