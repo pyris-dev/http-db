@@ -46,6 +46,10 @@ Open the root URL in a browser to use the built-in request console.
 - `npm run bundle`: compile a standalone executable via `bundle.ts`.
   - Output path: `./bundle/http-db-<version>.exe` on Windows.
   - Output path: `./bundle/http-db-<version>` on Linux.
+- `npm run release`: shorthand for `npm run release:patch`.
+- `npm run release:patch`: bump the patch version, create the release tag, and push the branch plus tags.
+- `npm run release:minor`: bump the minor version, create the release tag, and push the branch plus tags.
+- `npm run release:major`: bump the major version, create the release tag, and push the branch plus tags.
 - `npm run lint`: run ESLint.
 - `npm run lint:fix`: auto-fix ESLint issues where safe.
 
@@ -72,6 +76,7 @@ DATABASE_NAME: database.db
 - Release assets include both Windows and Ubuntu builds:
   - `http-db-<version>-windows-x64.exe`
   - `http-db-<version>-linux-x64`
+- The simplest release flow is `npm run release:patch`, which bumps the patch version, creates the `v*` tag, and pushes everything to GitHub.
 
 ## Try it — quick smoke test
 
